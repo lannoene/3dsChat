@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <poll.h>
 
 #include <3ds.h>
 
@@ -28,19 +29,6 @@ s32 sock = -1, csock = -1;
 __attribute__((format(printf,1,2)))
 void failExit(const char *fmt, ...);
 
-const static char http_200[] = "HTTP/1.1 200 OK\r\n";
-
-const static char indexdata[] = "<html> \
-                               <head><title>A test page</title></head> \
-                               <body> \
-                               This small test page has had %d hits. \
-                               </body> \
-                               </html>";
-
-const static char http_html_hdr[] = "Content-type: text/html\r\n\r\n";
-const static char http_get_index[] = "GET / HTTP/1.1\r\n";
-
-
 void socShutdown() {
 	printf("waiting for socExit...\n");
 	send(sock, "EXIT.", strlen("EXIT."), 0);
@@ -49,36 +37,17 @@ void socShutdown() {
 	socExit();
 }
 
-bool exitThread = false;
-
-void socketsListen() {
-	
-}
-
-void socketsWrite() {
-	while (!exitThread) {
-		hidScanInput();
-		
-		u32 kDown = hidKeysDown();
-		if (kDown & KEY_A) {
-			if (send(sock, "Hey server!", strlen("Hey server!"), 0) < 0) {
-				printf("Send failed (ON SOCKET SEND FUNC).");
-				return;
-			}
-		}
-	}
-}
-
-int main(int argc, char **argv) {
+int main() {
+	//software keyboard vars
+	static SwkbdState swkbd;
 	
 	gfxInitDefault();
 	consoleInit(GFX_TOP, NULL);
 	
-	printf ("\n3dsChat client alpha 0\n");
+	printf ("\n3dsChat client alpha 1\n");
 
 	int ret;
 
-	u32	clientlen;
 	struct sockaddr_in client;
 	struct sockaddr_in server;
 	
@@ -99,37 +68,41 @@ int main(int argc, char **argv) {
 	// atexit functions execute in reverse order so this runs before gfxExit
 	atexit(socShutdown);
 
-	// libctru provides BSD sockets so most code from here is standard
-	clientlen = sizeof(client);
-
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 
 	if (sock < 0) {
 		failExit("socket: %d %s\n", errno, strerror(errno));
 	}
 
-	memset (&server, 0, sizeof (server));
-	memset (&client, 0, sizeof (client));
+	memset(&server, 0, sizeof (server));
+	memset(&client, 0, sizeof (client));
+
+	char serverIp[50];
+
+	swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 1, -1);
+	swkbdSetFeatures(&swkbd, SWKBD_MULTILINE);
+	swkbdSetHintText(&swkbd, "Server ip");
+	swkbdInputText(&swkbd, serverIp, sizeof(serverIp));
 
 	server.sin_family = AF_INET;
 	server.sin_port = htons(80);
-	server.sin_addr.s_addr = inet_addr("192.168.1.253");
+	server.sin_addr.s_addr = inet_addr(serverIp);
 
-	// Set socket non blocking so we can still read input to exit
-	//fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK);
-	printf("connecting...\n");
+	printf("%s connecting...\n", serverIp);
 	//Connect to remote server
 	if (connect(sock, (struct sockaddr*)&server, sizeof(server)) < 0) {
 		puts("connect error");
-		return;
+		return 1;
 	}
-
+	
+	printf("connected! press A to chat\n");
 
 	// register gfxExit to be run when app quits
 	// this can help simplify error handling
 	atexit(gfxExit);
 
 	while (aptMainLoop()) {
+		
 		gspWaitForVBlank();
 		hidScanInput();
 		u32 kDown = hidKeysDown();
@@ -138,32 +111,55 @@ int main(int argc, char **argv) {
 			break;
 		}
 		
+		if (kDown & KEY_A) {
+			char sendMsg[100];
+			swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 1, -1);
+			swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, SWKBD_FILTER_DIGITS | SWKBD_FILTER_AT | SWKBD_FILTER_PERCENT | SWKBD_FILTER_BACKSLASH | SWKBD_FILTER_PROFANITY, 2);
+			swkbdSetFeatures(&swkbd, SWKBD_MULTILINE);
+			swkbdSetHintText(&swkbd, "Send message!");
+			swkbdInputText(&swkbd, sendMsg, sizeof(sendMsg));
+			
+			if (send(sock, sendMsg, strlen(sendMsg), 0) < 0) {
+				printf("Send failed (ON SOCKET SEND FUNC).");
+				return 1;
+			}
+			printf("Sent: %s\n", sendMsg);
+		}
+		
 		int iResult;
-		char* successMsg = "WAITING.";
 	
 		char recvbuf[DEFAULT_BUFLEN];
 		int recvbuflen = DEFAULT_BUFLEN;
 		memset(recvbuf, '\0', sizeof(char)*DEFAULT_BUFLEN);
 	
-		if (send(sock, successMsg, strlen(successMsg), 0) < 0) {
-			printf("Send failed. You may exit the program. (ON SOCKET RECV FUNC)");
-			return;
-		}
-		printf("wating for message...\n");
+		
+		//printf("wating for message...\n");
 		
 		gspWaitForVBlank();
-		
-        iResult = recv(sock, recvbuf, recvbuflen, 0);
+		struct pollfd sock_descriptor;
+		sock_descriptor.fd = sock;
+		sock_descriptor.events = POLLIN;
+
+		int return_value = poll(&sock_descriptor, 1, 0);
+
+		if (return_value == -1) {
+			printf("%s", strerror(errno));
+		} else if (return_value == 0) {
+			//printf("No data available to be read");
+		} else {
+			if (sock_descriptor.revents & POLLIN) {
+				iResult = recv(sock, recvbuf, recvbuflen, 0);
+			}
+		}
         if (iResult > 0) {
             printf("Bytes received: %d\n", iResult);
-			printf("%s\n", recvbuf);
+			printf("They said: %s\n", recvbuf);
 			memset(recvbuf, '\0', sizeof(char)*100);
 		} else if (iResult == 0) {
 			
 		}
+		iResult = 0;
 	}
-	
-	exitThread = true;
 	return 0;
 }
 
