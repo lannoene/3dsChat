@@ -44,7 +44,7 @@ int main() {
 	gfxInitDefault();
 	consoleInit(GFX_TOP, NULL);
 	
-	printf ("\n3dsChat client alpha 1\n");
+	printf ("\n3dsChat client alpha v1.1\n");
 
 	int ret;
 
@@ -95,11 +95,23 @@ int main() {
 		return 1;
 	}
 	
-	printf("connected! press A to chat\n");
+	printf("connected. waiting for server...\n");
 
 	// register gfxExit to be run when app quits
 	// this can help simplify error handling
 	atexit(gfxExit);
+	
+	char recvStat[10] = {0};
+
+	recv(sock, recvStat, 10, 0);
+	
+	if (strstr(recvStat, "READY.") != 0) {
+		printf("OK. Press A to chat!\n");
+	} else {
+		printf("ERR. Sorry about that!");
+		return 1;
+	}
+
 
 	while (aptMainLoop()) {
 		
@@ -113,17 +125,18 @@ int main() {
 		
 		if (kDown & KEY_A) {
 			char sendMsg[100];
-			swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 1, -1);
+			swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 2, -1);
 			swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, SWKBD_FILTER_DIGITS | SWKBD_FILTER_AT | SWKBD_FILTER_PERCENT | SWKBD_FILTER_BACKSLASH | SWKBD_FILTER_PROFANITY, 2);
 			swkbdSetFeatures(&swkbd, SWKBD_MULTILINE);
 			swkbdSetHintText(&swkbd, "Send message!");
-			swkbdInputText(&swkbd, sendMsg, sizeof(sendMsg));
+			int button = swkbdInputText(&swkbd, sendMsg, sizeof(sendMsg));
 			
-			if (send(sock, sendMsg, strlen(sendMsg), 0) < 0) {
+			
+			if (button == 2 && send(sock, sendMsg, strlen(sendMsg), 0) < 0) {
 				printf("Send failed (ON SOCKET SEND FUNC).");
 				return 1;
 			}
-			printf("Sent: %s\n", sendMsg);
+			//printf("Sent: %s\n", sendMsg);
 		}
 		
 		int iResult;
@@ -152,8 +165,11 @@ int main() {
 			}
 		}
         if (iResult > 0) {
-            printf("Bytes received: %d\n", iResult);
-			printf("They said: %s\n", recvbuf);
+			// printf("Bytes received: %d\n", iResult);
+			if (strstr(recvbuf, "EXIT.") != 0) {
+				return 0;
+			}
+			printf("%s\n", recvbuf);
 			memset(recvbuf, '\0', sizeof(char)*100);
 		} else if (iResult == 0) {
 			

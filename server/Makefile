@@ -14,7 +14,7 @@ SRCS := main.c
 OBJS := $(SRCS:.c=.o)
 
 # name of executable
-EXEC := hi
+EXEC := server
 
 # default recipe
 all: $(EXEC)

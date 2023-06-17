@@ -40,6 +40,9 @@ GRAPHICS	:=	gfx
 GFXBUILD	:=	$(BUILD)
 #ROMFS		:=	romfs
 #GFXBUILD	:=	$(ROMFS)/gfx
+APP_AUTHOR	:=  lannoene
+APP_TITLE	:=  3dsChat Client
+APP_DESCRIPTION	:= Chat with your friends!
 
 #---------------------------------------------------------------------------------
 # options for code generation

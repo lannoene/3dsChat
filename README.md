@@ -1,7 +1,7 @@
 # 3dsChat
 A simple way to chat between 3ds'
 ----------------------------
-So far, this program lets you send messages between one 3ds and a server. <br/>
-Todo: Add support for multiple 3ds' to join.<br/>
+This program lets you chat between 3ds'! <br/>
+Todo: Add on-the-fly 3ds connecting.<br/>
 <br/>
-Server is windows only. <br/>
+Note: server is windows only. <br/>
