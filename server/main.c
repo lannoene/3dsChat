@@ -10,17 +10,16 @@
 
 struct addrinfo *result = NULL, *ptr = NULL, hints;
 int num_sockets;
+int connected_sockets = 0;
+SOCKET ClientSockets[10];
+SOCKET ListenSocket = INVALID_SOCKET;
 
-
-int main() {
-	printf("3dsChat SERVER alpha v1.1\n");
-	printf("How many clients? (For now, you need to fill the server up before chatting)\n");
-	scanf("%d", &num_sockets);
+int connectSock() {
+	int iResult;
 	
 	//create wsadata
 	WSADATA wsaData;
 	
-	int iResult;
 	iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
 	
 	if (iResult != 0) {
@@ -46,100 +45,113 @@ int main() {
 		printf("getaddrinfo succeeded\n");
 	}
 	
-	SOCKET ClientSockets[num_sockets];
+	printf("---listening for socket #%d---\n", connected_sockets);
+	ListenSocket = INVALID_SOCKET;
+	
+	bool optval = true;
+	
+	// Create a SOCKET for the server to listen for client connections
+	ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+	
+	//we want to reuse the same address because we only have one address
+	iResult = setsockopt(ListenSocket, SOL_SOCKET, SO_REUSEADDR, (char *) &optval, sizeof(optval));
+		
+	if (ListenSocket == INVALID_SOCKET) {
+		printf("Error at socket(): %d\n", WSAGetLastError());
+		WSACleanup();
+		return 1;
+	} else {
+		printf("Socket succeeded\n");
+	}
+	// Setup the TCP listening socket
+	iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
+	if (iResult == SOCKET_ERROR) {
+		printf("bind failed with error: %d\n", WSAGetLastError());
+		closesocket(ListenSocket);
+		WSACleanup();
+		return 1;
+	} else {
+		printf("listening\n");
+	}
+		
+	char str[100];
+	ZeroMemory(str, sizeof(str));
+		
+	if (gethostname(str, sizeof(str)) == SOCKET_ERROR) {
+		printf("error getting hostname %d",  WSAGetLastError());
+	}
+	
+	
+	if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR) {
+		printf("Listen failed with error: %d\n", WSAGetLastError());
+		closesocket(ListenSocket);
+		WSACleanup();
+		return 1;
+	}
+	
+	return 0;
+}
+
+int main() {
+
+	int iResult;
+	
+	printf("3dsChat SERVER alpha v1.1\n");
+	//printf("How many clients? (For now, you need to fill the server up before chatting)\n");
+	//scanf("%d", &num_sockets);
+	
+	//connect a new socket command
+	connectSock();
+	
+	//get server ip
+	struct hostent *thisHost;
+	thisHost = gethostbyname("");
+	printf("Server address: %s\n", inet_ntoa(*(struct in_addr *) *thisHost->h_addr_list));
+	
+	
 	
 	char recvbuf[DEFAULT_BUFLEN];
 	int iSendResult;
 	int recvbuflen = DEFAULT_BUFLEN;
-	
-	for (int f = 0; f < num_sockets; f++) {
-		printf("---trying socket #%d---\n", f);
-		SOCKET ListenSocket = INVALID_SOCKET;
-		
-		bool optval = true;
-		
-		// Create a SOCKET for the server to listen for client connections
-		ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-		
-		iResult = setsockopt(ListenSocket, SOL_SOCKET, SO_REUSEADDR, (char *) &optval, sizeof(optval));
-		
-		if (ListenSocket == INVALID_SOCKET) {
-			printf("Error at socket(): %d\n", WSAGetLastError());
-			freeaddrinfo(result);
-			WSACleanup();
-			return 1;
-		} else {
-			printf("Socket succeeded\n");
-		}
-		// Setup the TCP listening socket
-		iResult = bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
-		if (iResult == SOCKET_ERROR) {
-			printf("bind failed with error: %d\n", WSAGetLastError());
-			freeaddrinfo(result);
-			closesocket(ListenSocket);
-			WSACleanup();
-			return 1;
-		} else {
-			printf("listening\n");
-		}
-		
-		char str[100];
-		ZeroMemory(str, sizeof(str));
-		
-		struct in_addr addr = { 0, };
-		struct hostent * res;
-		int i = 0;
-		
-		if (gethostname(str, sizeof(str)) == SOCKET_ERROR) {
-			printf("error getting hostname %d",  WSAGetLastError());
-		}
-
-		res = gethostbyname(str);
-		while (res->h_addr_list[i] != 0) {
-			addr.s_addr = *(u_long *)res->h_addr_list[i++];
-			printf("Server address: %s\n", inet_ntoa(addr));
-		}
-		
-		puts("listening to listen socket");
-		
-		if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR) {
-			printf("Listen failed with error: %d\n", WSAGetLastError());
-			closesocket(ListenSocket);
-			WSACleanup();
-			return 1;
-		}
-		
-		ClientSockets[f] = INVALID_SOCKET;
-		// Accept a client socket
-		ClientSockets[f] = accept(ListenSocket, NULL, NULL);
-		if (ClientSockets[f] == INVALID_SOCKET) {
-			printf("accept failed: %d\n", WSAGetLastError());
-			closesocket(ListenSocket);
-			WSACleanup();
-			return 1;
-		} else {
-			printf("New client #%d accepted\n", f);
-		}
-		puts("closed listen sock");
-		closesocket(ListenSocket);
-	}
 
 	printf("Press any key to chat.\n");
 	
-	//alert the clients that the server is ready
-	for (int f = 0; f < num_sockets; f++) {
-		iSendResult = send(ClientSockets[f], "READY.", strlen("READY."), 0);
-		if (iSendResult == SOCKET_ERROR) {
-			printf("send failed: %d\n", WSAGetLastError());
-			closesocket(ClientSockets[f]);
-			WSACleanup();
-			return 1;
-		}
-		printf("Bytes sent: %d\n", iSendResult);
-	}
-	
 	// Receive until the peer shuts down the connection
 	while (true) {
+
+		// Declare and initialize variables
+		WSAEVENT NewEvent[1];
+
+
+		// Create new event
+		NewEvent[0] = WSACreateEvent();
+	
+		// with the listening socket and NewEvent
+		WSAEventSelect(ListenSocket, NewEvent[0], FD_ACCEPT);
+		//deal with incoming clients
+		//no documentation... thank god for this single post pointing me in the right direction: https://stackoverflow.com/a/72793077
+		iResult = WSAWaitForMultipleEvents(1, NewEvent, FALSE, 0, FALSE);
+		//puts("waiting..");
+		if (iResult == WSA_WAIT_EVENT_0) {
+			// Accept a client socket
+			ClientSockets[connected_sockets] = accept(ListenSocket, NULL, NULL);
+			if (ClientSockets[connected_sockets] == INVALID_SOCKET) {
+				printf("accept failed: %d\n", WSAGetLastError());
+				closesocket(ListenSocket);
+				WSACleanup();
+				return 1;
+			} else {
+				printf("New client #%d accepted\n", connected_sockets);
+			}
+			puts("closed listen sock");
+			closesocket(ListenSocket);
+			++connected_sockets;
+			connectSock();
+		}
+		
+		iResult = 0;
+		
+		//deal with messages
 		char sendMsg[100] = {0};
 		char newbuf[100] = {0};
 			
@@ -149,7 +161,7 @@ int main() {
 			printf("Your message to send to them: ");
 			fgets(sendMsg, 100, stdin);
 			//Send data to user(s)
-			for (int f = 0; f < num_sockets; f++) {
+			for (int f = 0; f < connected_sockets; f++) {
 				snprintf(newbuf, 100, "Server: %s", sendMsg);
 				iSendResult = send(ClientSockets[f], newbuf, strlen(newbuf), 0);
 				if (iSendResult == SOCKET_ERROR) {
@@ -162,7 +174,7 @@ int main() {
 			}
 		}
 		
-		for (int f = 0; f < num_sockets; f++) {
+		for (int f = 0; f < connected_sockets; f++) {
 			//create wsapoll data
 			WSAPOLLFD fdarray = {0};
 			fdarray.fd = ClientSockets[f];
@@ -179,7 +191,7 @@ int main() {
 					recv(ClientSockets[f], recvbuf, recvbuflen, 0);
 					if (strstr(recvbuf, "EXIT.") != 0) {
 						printf("EXIT CALL RECIEVED.\n");
-						for (int j = 0; j < num_sockets; j++) {
+						for (int j = 0; j < connected_sockets; j++) {
 							iSendResult = send(ClientSockets[j], recvbuf, strlen("EXIT."), 0);
 							printf("Bytes sent: %d\n", iSendResult);
 						}
@@ -189,7 +201,7 @@ int main() {
 					snprintf(newbuf, 100, "Client #%d said: %s", f, recvbuf);
 					printf("%s\n", newbuf);
 					//send the message to all users
-					for (int j = 0; j < num_sockets; j++) {
+					for (int j = 0; j < connected_sockets; j++) {
 						iSendResult = send(ClientSockets[j], newbuf, strlen(newbuf), 0);
 						printf("Bytes sent: %d\n", iSendResult);
 					}
@@ -209,7 +221,7 @@ int main() {
 		}
 	}
 	printf("exiting...");
-	for (int f = 0; f < num_sockets; f++) {
+	for (int f = 0; f < connected_sockets; f++) {
 		closesocket(ClientSockets[f]);
 	}
 	

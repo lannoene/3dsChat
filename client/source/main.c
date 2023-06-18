@@ -101,18 +101,7 @@ int main() {
 	// this can help simplify error handling
 	atexit(gfxExit);
 	
-	char recvStat[10] = {0};
-
-	recv(sock, recvStat, 10, 0);
-	
-	if (strstr(recvStat, "READY.") != 0) {
-		printf("OK. Press A to chat!\n");
-	} else {
-		printf("ERR. Sorry about that!");
-		return 1;
-	}
-
-
+	printf("OK. Press A to chat!\n");
 	while (aptMainLoop()) {
 		
 		gspWaitForVBlank();
