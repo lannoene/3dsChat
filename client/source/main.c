@@ -44,7 +44,7 @@ int main() {
 	gfxInitDefault();
 	consoleInit(GFX_TOP, NULL);
 	
-	printf ("\n3dsChat client alpha v1.1\n");
+	printf ("\n3dsChat client alpha v1.2\n");
 
 	int ret;
 

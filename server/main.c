@@ -96,7 +96,7 @@ int main() {
 
 	int iResult;
 	
-	printf("3dsChat SERVER alpha v1.1\n");
+	printf("3dsChat SERVER alpha v1.2\n");
 	//printf("How many clients? (For now, you need to fill the server up before chatting)\n");
 	//scanf("%d", &num_sockets);
 	
