@@ -5,8 +5,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <unistd.h>
-
-#include <fcntl.h>
+#include <sys/stat.h>
 
 #include <sys/types.h>
 
@@ -16,162 +15,210 @@
 #include <poll.h>
 
 #include <3ds.h>
+#include <citro2d.h>
 
-#define SOC_ALIGN       0x1000
-#define SOC_BUFFERSIZE  0x100000
+#include "draw.h"
+#include "init.h"
+#include "chat.h"
+#include "config.h"
 
-#define DEFAULT_BUFLEN 512
-#define STACKSIZE (4 * 1024)
-
-static u32 *SOC_buffer = NULL;
-s32 sock = -1, csock = -1;
+//s32 sock = -1;
 
 __attribute__((format(printf,1,2)))
 void failExit(const char *fmt, ...);
 
-void socShutdown() {
-	printf("waiting for socExit...\n");
-	send(sock, "EXIT.", strlen("EXIT."), 0);
-	
-	close(sock);
-	socExit();
-}
+C2D_TextBuf g_dynamicBuf;
+C3D_RenderTarget* top;
+C3D_RenderTarget* bot;
+
+enum isOnnum {
+	TITLESCREEN = 0,
+	CHAT,
+	SETTINGS
+};
+
+struct jsonParse settings_cfg;
 
 int main() {
-	//software keyboard vars
-	static SwkbdState swkbd;
-	
 	gfxInitDefault();
-	consoleInit(GFX_TOP, NULL);
+	citroInit();
 	
-	printf ("\n3dsChat client alpha v1.2\n");
-
-	int ret;
-
-	struct sockaddr_in client;
-	struct sockaddr_in server;
-	
-	
-	// allocate buffer for SOC service
-	SOC_buffer = (u32*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
-
-	if(SOC_buffer == NULL) {
-		failExit("memalign: failed to allocate\n");
-	}
-
-	// Now intialise soc:u service
-	if ((ret = socInit(SOC_buffer, SOC_BUFFERSIZE)) != 0) {
-    	failExit("socInit: 0x%08X\n", (unsigned int)ret);
-	}
-
-	// register socShutdown to run at exit
-	// atexit functions execute in reverse order so this runs before gfxExit
-	atexit(socShutdown);
-
-	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-
-	if (sock < 0) {
-		failExit("socket: %d %s\n", errno, strerror(errno));
-	}
-
-	memset(&server, 0, sizeof (server));
-	memset(&client, 0, sizeof (client));
-
-	char serverIp[50];
-
-	swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 1, -1);
-	swkbdSetFeatures(&swkbd, SWKBD_MULTILINE);
-	swkbdSetHintText(&swkbd, "Server ip");
-	swkbdInputText(&swkbd, serverIp, sizeof(serverIp));
-
-	server.sin_family = AF_INET;
-	server.sin_port = htons(80);
-	server.sin_addr.s_addr = inet_addr(serverIp);
-
-	printf("%s connecting...\n", serverIp);
-	//Connect to remote server
-	if (connect(sock, (struct sockaddr*)&server, sizeof(server)) < 0) {
-		puts("connect error");
-		return 1;
+	if (chdir("sdmc:/3ds") != 0) {
+		if (!mkdir("sdmc:/3ds", 0700)) {
+			consoleInit(GFX_TOP, NULL);
+			printf("Could not create or move into /3ds dir.\nPlease set sd card to non-write protected or do smth else idk\nApp will exit in 7 seconds.");
+			sleep(7);
+			return 1;
+		} else {
+			chdir("sdmc:/3ds");
+		}
 	}
 	
-	printf("connected. waiting for server...\n");
-
-	// register gfxExit to be run when app quits
-	// this can help simplify error handling
-	atexit(gfxExit);
+	g_dynamicBuf = C2D_TextBufNew(4096); // support up to 4096 glyphs in the buffer
 	
-	printf("OK. Press A to chat!\n");
+	top = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
+	bot = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
+	
+	settings_cfg = checkSettings();
+	//force set settings set to false
+	writeSettings();
+	//memset(logMsgs, 0, sizeof(logMsgs));
+	
+	C2D_SpriteSheet spriteSheet = C2D_SpriteSheetLoad("romfs:/gfx/sprites.t3x");
+	if (!spriteSheet) svcBreak(USERBREAK_PANIC);
+	bool hasConn = false;
+	int isOn = TITLESCREEN;
 	while (aptMainLoop()) {
 		
 		gspWaitForVBlank();
 		hidScanInput();
+		
+		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+		
 		u32 kDown = hidKeysDown();
+		
 		if (kDown & KEY_START) {
 			printf("Both the client and server must exit. Sorry about that!\n");
 			break;
 		}
-		
-		if (kDown & KEY_A) {
-			char sendMsg[100];
-			swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 2, -1);
-			swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, SWKBD_FILTER_DIGITS | SWKBD_FILTER_AT | SWKBD_FILTER_PERCENT | SWKBD_FILTER_BACKSLASH | SWKBD_FILTER_PROFANITY, 2);
-			swkbdSetFeatures(&swkbd, SWKBD_MULTILINE);
-			swkbdSetHintText(&swkbd, "Send message!");
-			int button = swkbdInputText(&swkbd, sendMsg, sizeof(sendMsg));
+		if (isOn == TITLESCREEN) {
+			C2D_TargetClear(top, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
+			C2D_SceneBegin(top);
+			
+			text("3dsChat Client v1.3", 200, 90, 0.5f, ALIGN_CENTER);
+			text("Press 'a' to begin", 200, 110, 0.5f, ALIGN_CENTER);
+			
+			C2D_TargetClear(bot, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
+			C2D_SceneBegin(bot);
 			
 			
-			if (button == 2 && send(sock, sendMsg, strlen(sendMsg), 0) < 0) {
-				printf("Send failed (ON SOCKET SEND FUNC).");
-				return 1;
+			if (kDown & KEY_A) {
+				isOn = CHAT;
 			}
-			//printf("Sent: %s\n", sendMsg);
-		}
-		
-		int iResult;
-	
-		char recvbuf[DEFAULT_BUFLEN];
-		int recvbuflen = DEFAULT_BUFLEN;
-		memset(recvbuf, '\0', sizeof(char)*DEFAULT_BUFLEN);
-	
-		
-		//printf("wating for message...\n");
-		
-		gspWaitForVBlank();
-		struct pollfd sock_descriptor;
-		sock_descriptor.fd = sock;
-		sock_descriptor.events = POLLIN;
-
-		int return_value = poll(&sock_descriptor, 1, 0);
-
-		if (return_value == -1) {
-			printf("%s", strerror(errno));
-		} else if (return_value == 0) {
-			//printf("No data available to be read");
-		} else {
-			if (sock_descriptor.revents & POLLIN) {
-				iResult = recv(sock, recvbuf, recvbuflen, 0);
-			}
-		}
-        if (iResult > 0) {
-			// printf("Bytes received: %d\n", iResult);
-			if (strstr(recvbuf, "EXIT.") != 0) {
-				return 0;
-			}
-			printf("%s\n", recvbuf);
-			memset(recvbuf, '\0', sizeof(char)*100);
-		} else if (iResult == 0) {
+		} else if (isOn == CHAT) {
+			//render top screen
+			C2D_TargetClear(top, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
+			C2D_SceneBegin(top);
+			if (hasConn == true) {
+				if (kDown & KEY_A) {
+					sendMsgSocket(&settings_cfg);
+				}
 			
+				if (kDown & KEY_UP) {
+					moveChat(0);
+				} else if (kDown & KEY_DOWN) {
+					moveChat(1);
+				}
+		
+				recvChat();
+				displayChat();
+			} else {
+				text("Connect to a server by pressing 'x' and typing in the server ip", 200, 100, 0.5f, ALIGN_CENTER);
+				text("Edit settings by pressing 'select'", 200, 115, 0.5f, ALIGN_CENTER);
+				text("Quick connect by pressing 'Y'", 200, 130, 0.5f, ALIGN_CENTER);
+				displayChat();
+			}
+			
+			if (kDown & KEY_X && hasConn == false) {
+				char serverIp[50];
+				extern SwkbdState swkbd;//todo: find out why i'm doing this
+				swkbdInit(&swkbd, SWKBD_TYPE_WESTERN, 1, -1);
+				swkbdSetFeatures(&swkbd, SWKBD_MULTILINE);
+				swkbdSetHintText(&swkbd, "Server ip");
+				swkbdInputText(&swkbd, serverIp, sizeof(serverIp));
+				//sendStatusMsg("Connecting...");
+		
+				if (initSockets(serverIp) != 0) {
+					sendStatusMsg("Could not connect.");
+				} else {
+					sendStatusMsg("Successfully connected. Press 'a' to chat!");
+					hasConn = true;
+				}
+			} else if (kDown & KEY_SELECT) {
+				isOn = SETTINGS;
+				extern int userPointer;
+				userPointer = 0;
+			} else if (kDown & KEY_Y && hasConn == false) {
+				//sendStatusMsg("Connecting...");
+				if (strcmp(settings_cfg.favServer, "NOTSET") == 0) {
+					sendStatusMsg("You need to set a favorite server!");
+				} else {
+					if (initSockets(settings_cfg.favServer) != 0) {
+						sendStatusMsg("Could not connect.");
+					} else {
+						sendStatusMsg("Successfully connected. Press 'a' to chat!");
+						hasConn = true;
+					}
+				}
+			}
+			
+			drawHud("Chat", spriteSheet);
+			
+			//render bottom screen
+			
+			C2D_TargetClear(bot, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
+			C2D_SceneBegin(bot);
+		
+			text("3dsChat Client Alpha v1.3", 0, 0, 0.5f, ALIGN_LEFT);
+		
+			C2D_DrawImageAt(C2D_SpriteSheetGetImage(spriteSheet, APP_ICON), 90, 40, 0.0f, NULL, 2, 2);
+		} else if (isOn == SETTINGS) {
+			//render top screen
+			C2D_TargetClear(top, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
+			C2D_SceneBegin(top);
+			
+			drawHud("Settings", spriteSheet);
+			
+			C2D_DrawImageAt(C2D_SpriteSheetGetImage(spriteSheet, SETTINGS_ICON), 130, 50, 0.0f, NULL, 2, 2);
+			
+			C2D_TargetClear(bot, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
+			C2D_SceneBegin(bot);
+			
+			drawSettings();
+			
+			if (kDown & KEY_UP) {
+				moveCfgPointer(0);
+			} else if (kDown & KEY_DOWN) {
+				moveCfgPointer(1);
+			}
+			/*
+			char your_age[10];
+			char settingName[50];
+			itoa(settings_cfg.age, your_age, 10);
+			snprintf(settingName, sizeof(settingName), "Your name: %s", settings_cfg.name);
+			if (strcmp(settings_cfg.name, "NOTSET") != 0) {
+				text(settingName, 0, 0, 0.5f, ALIGN_LEFT);
+			} else {
+				text("You have not set a name.", 0, 0, 0.5f, ALIGN_LEFT);
+			}*/
+			if (kDown & KEY_A) {
+				performCfgAction(&settings_cfg);
+			} else if (kDown & KEY_SELECT) {
+				saveJson(&settings_cfg);
+				isOn = CHAT;
+			}
 		}
-		iResult = 0;
+		C3D_FrameEnd(0);
 	}
+	
+	saveJson(&settings_cfg);
+	// Delete graphics
+	C2D_SpriteSheetFree(spriteSheet);
+	
+	// Deinit libs
+	C2D_Fini();
+	C3D_Fini();
+	gfxExit();
+	
+	serverSend("EXIT.", "");
+	exitSocket();
+	socExit();
 	return 0;
 }
 
 void failExit(const char *fmt, ...) {
 
-	if(sock>0) close(sock);
-	if(csock>0) close(csock);
+	//if(sock>0) close(sock);
 
 	va_list ap;
 

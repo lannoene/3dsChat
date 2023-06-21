@@ -1,0 +1,7 @@
+--atlas -f rgba8888 -z auto
+3dsChat_icon.png
+settings_wrench.png
+wifi_full.png
+wifi_good.png
+wifi_okay.png
+wifi_bad.png

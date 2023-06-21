@@ -3,7 +3,7 @@
 # set the compiler flags
 CFLAGS := -ggdb3 -O0 -Wall
 LDFLAGS := -mconsole
-LDFLAGS += -lws2_32 -pthread
+LDFLAGS += -lws2_32
 # add header files here
 HDRS :=
 
