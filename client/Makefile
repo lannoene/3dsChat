@@ -49,7 +49,7 @@ APP_DESCRIPTION	:= Chat with your friends!
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 
-CFLAGS	:=	-std=gnu99 -g -Wall -O2 -mword-relocations \
+CFLAGS	:=	-std=gnu17 -g -Wall -O2 -mword-relocations \
 			-ffunction-sections \
 			$(ARCH)
 

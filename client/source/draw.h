@@ -17,3 +17,4 @@ void text(char* yourText, int x, int y, float scale, int displType);
 void drawImage(int image, int x, int y, float scale);
 void initSheet();
 void drawHud(char* heading, C2D_SpriteSheet spriteSheet);
+int drawOptionsMenu();

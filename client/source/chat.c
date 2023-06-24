@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <fcntl.h>
+#include <stdarg.h>
 
 #define SOC_ALIGN       0x1000
 #define SOC_BUFFERSIZE  0x100000
@@ -45,6 +46,8 @@ struct Smessage {
 
 int recvdMsgs = 0;
 s32 sock = -1;
+static u32 *SOC_buffer = NULL;
+struct pollfd sock_descriptor;
 
 void resetMsgVars(bool resetRecv, bool resetSend) {
 	if (resetRecv == true) {
@@ -83,7 +86,7 @@ void recvChat() {
 		if (strstr(recvMsg.msgHead, "EXIT.") != 0) {
 			return;
 		} else if (strstr(recvMsg.msgHead, "TEXT.") != 0) {
-			printf("%s\n", recvMsg.msgBody);
+			//printf("%s\n", recvMsg.msgBody);
 			strcpy(logMsgs[recvdMsgs].msgBody, recvMsg.msgBody);
 			strcpy(logMsgs[recvdMsgs].msgName, recvMsg.msgName);
 			++recvdMsgs;
@@ -98,15 +101,25 @@ void recvChat() {
 	}
 }
 
-void displayChat() {
+void displayChat(struct jsonParse *config) {
+	if (recvdMsgs == 0) {
+		text("Connect to a server by pressing 'x' and typing in the server ip", 200, 100, 0.5f, ALIGN_CENTER);
+		text("Edit settings by pressing 'select'", 200, 115, 0.5f, ALIGN_CENTER);
+		text("Quick connect by pressing 'Y'", 200, 130, 0.5f, ALIGN_CENTER);
+	}
 	int n = recvdMsgs - 1;
 	for (int i = 0; i < recvdMsgs; i++) {
 		if (strcmp(logMsgs[n].msgHead, "STATUS.") == 0) {
 			char* statusText = strdup(logMsgs[n].msgBody);
 			text(statusText, 2, chatOffset - i*15, 0.5f, ALIGN_LEFT);
 		} else {
-			char fullPrnt[50];
-			snprintf(fullPrnt, 50, "%s said: %s", logMsgs[n].msgName, logMsgs[n].msgBody);
+			char fullPrnt[500];
+			snprintf(fullPrnt, 500, "%s said: %s", logMsgs[n].msgName, logMsgs[n].msgBody);
+			char atname[21];
+			snprintf(atname, 21, "@%s", config->name);
+			if (strstr(logMsgs[n].msgBody, atname) != 0 && strcmp(config->name, "NOTSET") != 0 && config->showPings == true) {
+				C2D_DrawRectSolid(0, chatOffset - i*15 + 1, 0, 400, 15, C2D_Color32f(0.980f, 0.964f, 0.00f, 0.5f));
+			}
 			text(fullPrnt, 2, chatOffset - i*15, 0.5f, ALIGN_LEFT);
 		}
 		--n;
@@ -119,7 +132,7 @@ SwkbdLearningData swkbdLearning;
 
 void sendMsgSocket(struct jsonParse *config) {
 	swkbdInit(&swkbd, SWKBD_TYPE_NORMAL, 2, -1);
-	swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, SWKBD_FILTER_DIGITS | SWKBD_FILTER_AT | SWKBD_FILTER_PERCENT | SWKBD_FILTER_BACKSLASH | SWKBD_FILTER_PROFANITY, -1);
+	swkbdSetValidation(&swkbd, SWKBD_NOTEMPTY_NOTBLANK, SWKBD_FILTER_DIGITS | SWKBD_FILTER_PERCENT | SWKBD_FILTER_BACKSLASH, -1);
 	swkbdSetFeatures(&swkbd, SWKBD_MULTILINE | SWKBD_PREDICTIVE_INPUT);
 	static bool reload = false;
 	swkbdSetStatusData(&swkbd, &swkbdStatus, reload, true);
@@ -135,30 +148,30 @@ void sendMsgSocket(struct jsonParse *config) {
 	//printf("Sent: %s\n", sendMsg);
 }
 
-
-int initSockets(char* serverIp) {
-	struct sockaddr_in server;
-	static u32 *SOC_buffer = NULL;
-	int ret;
-	
+int initSocket() {
 	// allocate buffer for SOC service
 	SOC_buffer = (u32*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
 
 	if(SOC_buffer == NULL) {
-		//failExit("memalign: failed to allocate\n");
+		debugMsg("memalign: failed to allocate");\
+		return 1;
 	}
+
 
 	// Now intialise soc:u service
-	if ((ret = socInit(SOC_buffer, SOC_BUFFERSIZE)) != 0) {
-    	//failExit("socInit: 0x%08X\n", (unsigned int)ret);
+	if ((socInit(SOC_buffer, SOC_BUFFERSIZE)) != 0) {
+		debugMsg("Failed to allocate buffer");
+    	return 1;
 	}
+	return 0;
+}
 
-	// register socShutdown to run at exit
-	// atexit functions execute in reverse order so this runs before gfxExit
-	//extern atexit(socShutdown);
+int connectSocket(char* serverIp) {
+	struct sockaddr_in server;
 
-	if (sock < 0) {
-		//failExit("socket: %d %s\n", errno, strerror(errno));
+	if (errno == EWOULDBLOCK) {
+		sendStatusMsg("Socket connecting. You can't place 2 requests at the same time. Try again soon.");
+		return 4;
 	}
 	
 	memset(&server, 0, sizeof (server));
@@ -169,12 +182,53 @@ int initSockets(char* serverIp) {
 	
 	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 	
+	fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK);
+	
 	if (connect(sock, (struct sockaddr*)&server, sizeof(server)) < 0) {
-		sendStatusMsg(strerror(errno));
-		return 1;
+		fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) & ~O_NONBLOCK);
+	} else {
+		return 0;
 	}
 	
-	return 0;
+	if (errno == EAFNOSUPPORT) {
+		debugMsg("Error 47: The specified protocol family is not supported.");
+		return 6;
+	}
+	
+	for (size_t i = 0; i < 9999; i++) {
+		sock_descriptor.fd = sock;
+		sock_descriptor.events = POLLIN;
+
+		int return_value = poll(&sock_descriptor, 1, 0);
+		
+		hidScanInput();
+		u32 kDown = hidKeysDown();
+		if (kDown & KEY_START) {
+			return 1;
+		}
+		if (return_value == -1) {
+			debugMsg("Could not poll socket.");
+			return 2;
+		}
+		if (sock_descriptor.revents & POLLIN) {
+			unsigned long sockret = 0;
+			recv(sock, &sockret, sizeof(sockret), 0);
+			unsigned long cEsockRet = ntohl(sockret);
+			if (cEsockRet == 100) {
+				fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) & ~O_NONBLOCK);
+				return 0;
+			} else {
+				char errorNum[20];
+				sprintf(errorNum, "%ld", cEsockRet);
+				debugMsg(errorNum);
+			}
+		}
+	}
+
+
+	close(sock);
+	debugMsg("Server did not respond in time.");
+	return 3;
 }
 
 void moveChat(int way) {
@@ -193,12 +247,50 @@ void serverSend(char* header, char* body) {
 	send(sock, &sendMsg, sizeof(sendMsg), 0);
 }
 
-void sendStatusMsg(char* message) {
+void debugMsg(char* message) {
+	extern struct jsonParse settings_cfg;
+	if (settings_cfg.showDebugMsgs == true) {
+		strcpy(logMsgs[recvdMsgs].msgHead, "STATUS.");
+		strcpy(logMsgs[recvdMsgs].msgBody, message);
+		++recvdMsgs;
+	}
+}
+void sendStatusMsg(char* messageTmp, ...) {
+	char message[200];
+	strcpy(message, messageTmp);
+	if (strstr(messageTmp, "%") != 0) {
+		va_list ap;
+		va_start(ap, messageTmp);
+		char out[200] = {0};
+		int insertIndex = 0;
+		char* token;
+		token = strtok(message, "%");
+		while (token != NULL) {
+			char* insert = va_arg(ap, char*);
+			if (token == NULL) {
+				break;
+			}
+			char prevMsg[200];
+		
+			strcpy(prevMsg, token);
+			strcat(prevMsg, insert);
+			strcat(out, prevMsg);
+			token = strtok(NULL , "%");
+			if (strstr(out, "%") == 0) {
+				break;
+			}
+		}
+		strcpy(message, out);
+		va_end(ap);
+	}
+	
 	strcpy(logMsgs[recvdMsgs].msgHead, "STATUS.");
 	strcpy(logMsgs[recvdMsgs].msgBody, message);
 	++recvdMsgs;
 }
 
+
 void exitSocket() {
 	close(sock);
 }
+

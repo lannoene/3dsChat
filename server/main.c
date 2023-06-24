@@ -1,3 +1,12 @@
+/*
+* lannoene here! I'm probably not going to continue working on this project
+* it doesn't seem to be getting very much attention, which is fair I guess
+* though, it does mean I can just quit and nobody will care XD
+* so that's what I'm doing.
+* sorry!
+* if you need any bug fixes done, submit a request and I may fix it.
+*/
+
 #include <stdio.h>
 #include <winsock2.h>
 #include <stdbool.h>
@@ -7,6 +16,8 @@
 
 #define DEFAULT_PORT "80"
 #define DEFAULT_BUFLEN 512
+
+#define MAX_SOCKETS 50
 
 #define SEND_SIZE 512
 #define HEADER_SIZE 32
@@ -19,7 +30,7 @@ int connected_sockets = 0;
 struct clients {
 	SOCKET sock;
 	bool isConnected;
-} ClientSockets[50];
+} ClientSockets[MAX_SOCKETS];
 SOCKET ListenSocket = INVALID_SOCKET;
 
 struct Smessage {
@@ -77,7 +88,7 @@ int connectSock() {
 		printf("getaddrinfo succeeded\n");
 	}
 	
-	printf("---listening for socket #%d---\n", connected_sockets);
+	printf("---listening for new client---\n");
 	ListenSocket = INVALID_SOCKET;
 	
 	bool optval = true;
@@ -126,7 +137,7 @@ int sendMessageToAll(char* header, char* message, char* name) {
 	strcpy(sendMsg.msgBody, message);
 	strcpy(sendMsg.msgName, name);
 	
-	for (int f = 0; f < connected_sockets; f++) {
+	for (int f = 0; f < MAX_SOCKETS; f++) {
 		if (ClientSockets[f].isConnected == false) {
 			continue;
 		}
@@ -147,7 +158,7 @@ int main() {
 
 	int iResult;
 	
-	printf("3dsChat SERVER alpha v1.2\n");
+	printf("3dsChat SERVER alpha v1.4\n");
 	//printf("How many clients? (For now, you need to fill the server up before chatting)\n");
 	//scanf("%d", &num_sockets);
 	
@@ -165,13 +176,22 @@ int main() {
 	
 	printf("Press 't' to chat.\n");
 	
+	
+	char header[HEADER_SIZE];
+	char bodyer[BODY_SIZE];
+	WSAEVENT NewEvent[1];
+	
+	//create wsapoll data
+	WSAPOLLFD fdarray = {0};
+	
+	for (int i = 0; i < MAX_SOCKETS; i++) {
+		ClientSockets[i].isConnected = false;
+	}
+	
 	// Receive until the peer shuts down the connection
 	while (true) {
-		char header[HEADER_SIZE];
-		char bodyer[BODY_SIZE];
 		//deal with incoming clients
 		//winsock event var
-		WSAEVENT NewEvent[1];
 		NewEvent[0] = WSACreateEvent();
 		// with the listening socket and NewEvent listening for FD_ACCEPT
 		WSAEventSelect(ListenSocket, NewEvent[0], FD_ACCEPT);
@@ -180,22 +200,32 @@ int main() {
 		//puts("waiting..");
 		if (iResult == WSA_WAIT_EVENT_0) {
 			// Accept a client socket
-			ClientSockets[connected_sockets].sock = accept(ListenSocket, NULL, NULL);
-			if (ClientSockets[connected_sockets].sock == INVALID_SOCKET) {
+			int currentConnectingSocket;
+			for (int i = 0; i < MAX_SOCKETS; i++) {
+				if (ClientSockets[i].isConnected == false) {
+					ClientSockets[i].sock = accept(ListenSocket, NULL, NULL);
+					currentConnectingSocket = i;
+					break;
+				}
+			}
+			if (ClientSockets[currentConnectingSocket].sock == INVALID_SOCKET) {
 				printf("accept failed: %d\n", WSAGetLastError());
 				closesocket(ListenSocket);
 				WSACleanup();
+				//if you ever get error 10035 here, your 3ds will immidietly crash. i'm too lazy to fix this (adding error handling)
 				return 1;
 			} else {
-				printf("New client #%d accepted\n", connected_sockets);
+				printf("New client #%d accepted\n", currentConnectingSocket);
 				char joinMsg[20];
-				snprintf(joinMsg, 20, "Client #%d joined", connected_sockets);
+				snprintf(joinMsg, 20, "Client #%d joined", currentConnectingSocket);
 				sendMessageToAll("STATUS.", joinMsg, "Server");
-				ClientSockets[connected_sockets].isConnected = true;
+				unsigned long OK_HANDSHAKE = htonl(100);
+				send(ClientSockets[currentConnectingSocket].sock, (char*)&OK_HANDSHAKE, sizeof(OK_HANDSHAKE), 0);//perform handshake
+				ClientSockets[currentConnectingSocket].isConnected = true;
+				
 			}
 			puts("closed listen sock");
 			closesocket(ListenSocket);
-			++connected_sockets;
 			connectSock();
 		}
 		iResult = 0;
@@ -219,12 +249,10 @@ int main() {
 			}
 		}
 		
-		for (int f = 0; f < connected_sockets; f++) {
+		for (int f = 0; f < MAX_SOCKETS; f++) {
 			if (ClientSockets[f].isConnected == false) {
 				continue;
 			}
-			//create wsapoll data
-			WSAPOLLFD fdarray = {0};
 			fdarray.fd = ClientSockets[f].sock;
 			fdarray.events = POLLRDNORM;
 			
@@ -233,7 +261,10 @@ int main() {
 			int ret = WSAPoll(&fdarray, 1, 0);
 
 			if (ret == SOCKET_ERROR) {
-				printf("POLL ERR\n");
+				ClientSockets[f].isConnected = false;
+				printf("POLL ERR.Disconnecting client socket.\n");
+				closesocket(ClientSockets[f].sock);
+				continue;
 			} else {
 				if (fdarray.revents & POLLRDNORM) {
 					//clear the buffer
@@ -258,8 +289,8 @@ int main() {
 					
 					//send the message to everyone
 					if (strcmp(recvMsg.msgName, "NOTSET") == 0) {
-						char tmpName[10];
-						snprintf(tmpName, 10, "Client #%d", f);
+						char tmpName[20];
+						snprintf(tmpName, 20, "Client #%d", f);
 						sendMessageToAll(header, bodyer, tmpName);
 					} else {
 						sendMessageToAll(header, bodyer, recvMsg.msgName);

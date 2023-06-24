@@ -6,12 +6,21 @@
 #define BODY_SIZE SEND_SIZE - HEADER_SIZE - NAME_SIZE
 #define MAX_LOG 250
 
+#include <jansson.h>
+#include <stdarg.h>
+
+#include "config.h"
+
+
+
 void resetMsgVars(bool resetRecv, bool resetSend);
 void recvChat();
 void sendMsgSocket();
-int initSockets();
+int initSocket();
+int connectSocket();
 void moveChat(int way);
-void displayChat();
+void displayChat(struct jsonParse *config);
 void serverSend(char* header, char* body);
-void sendStatusMsg(char* message);
+void sendStatusMsg(char* message, ...);
 void exitSocket();
+void debugMsg(char* message);

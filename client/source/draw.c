@@ -43,7 +43,7 @@ void drawHud(char* heading, C2D_SpriteSheet spriteSheet) {
 
 	snprintf(timeString, sizeof(timeString), "%d %02d", normalTmHr, timeInfo->tm_min);
 	
-	text(timeString, 380, 2, 0.5f, ALIGN_CENTER);
+	text(timeString, 375, 2, 0.5f, ALIGN_CENTER);
 	
 	if (timeInfo->tm_sec % 2 == 0) {
 		text(":", 374, 2, 0.5f, 0);
@@ -64,4 +64,11 @@ void drawHud(char* heading, C2D_SpriteSheet spriteSheet) {
 			C2D_DrawImageAt(C2D_SpriteSheetGetImage(spriteSheet, NO_WIFI), 2, 2, 0.0f, NULL, 1, 1);
 		break;
 	}
+}
+
+int drawOptionsMenu() {
+	
+	C2D_DrawRectSolid(0, 0, 0, 400, 20, C2D_Color32f(0.5f, 0.5f, 0.5f, 1.0f));
+	
+	return 5;
 }

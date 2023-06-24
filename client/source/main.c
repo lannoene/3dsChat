@@ -22,11 +22,6 @@
 #include "chat.h"
 #include "config.h"
 
-//s32 sock = -1;
-
-__attribute__((format(printf,1,2)))
-void failExit(const char *fmt, ...);
-
 C2D_TextBuf g_dynamicBuf;
 C3D_RenderTarget* top;
 C3D_RenderTarget* bot;
@@ -59,10 +54,11 @@ int main() {
 	top = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
 	bot = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 	
-	settings_cfg = checkSettings();
-	//force set settings set to false
 	writeSettings();
-	//memset(logMsgs, 0, sizeof(logMsgs));
+	
+	settings_cfg = checkSettings();
+	
+	initSocket();
 	
 	C2D_SpriteSheet spriteSheet = C2D_SpriteSheetLoad("romfs:/gfx/sprites.t3x");
 	if (!spriteSheet) svcBreak(USERBREAK_PANIC);
@@ -72,10 +68,10 @@ int main() {
 		
 		gspWaitForVBlank();
 		hidScanInput();
+		u32 kDown = hidKeysDown();
 		
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 		
-		u32 kDown = hidKeysDown();
 		
 		if (kDown & KEY_START) {
 			printf("Both the client and server must exit. Sorry about that!\n");
@@ -85,7 +81,7 @@ int main() {
 			C2D_TargetClear(top, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
 			C2D_SceneBegin(top);
 			
-			text("3dsChat Client v1.3", 200, 90, 0.5f, ALIGN_CENTER);
+			text("3dsChat Client Alpha v1.4", 200, 90, 0.5f, ALIGN_CENTER);
 			text("Press 'a' to begin", 200, 110, 0.5f, ALIGN_CENTER);
 			
 			C2D_TargetClear(bot, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
@@ -95,6 +91,7 @@ int main() {
 			if (kDown & KEY_A) {
 				isOn = CHAT;
 			}
+			
 		} else if (isOn == CHAT) {
 			//render top screen
 			C2D_TargetClear(top, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
@@ -103,22 +100,20 @@ int main() {
 				if (kDown & KEY_A) {
 					sendMsgSocket(&settings_cfg);
 				}
-			
-				if (kDown & KEY_UP) {
-					moveChat(0);
-				} else if (kDown & KEY_DOWN) {
-					moveChat(1);
-				}
 		
 				recvChat();
-				displayChat();
+				displayChat(&settings_cfg);
 			} else {
-				text("Connect to a server by pressing 'x' and typing in the server ip", 200, 100, 0.5f, ALIGN_CENTER);
-				text("Edit settings by pressing 'select'", 200, 115, 0.5f, ALIGN_CENTER);
-				text("Quick connect by pressing 'Y'", 200, 130, 0.5f, ALIGN_CENTER);
-				displayChat();
+				//tooltip is in displaychat func
+				displayChat(&settings_cfg);
 			}
 			
+			
+			if (kDown & KEY_UP) {
+				moveChat(0);
+			} else if (kDown & KEY_DOWN) {
+				moveChat(1);
+			}
 			if (kDown & KEY_X && hasConn == false) {
 				char serverIp[50];
 				extern SwkbdState swkbd;//todo: find out why i'm doing this
@@ -128,7 +123,7 @@ int main() {
 				swkbdInputText(&swkbd, serverIp, sizeof(serverIp));
 				//sendStatusMsg("Connecting...");
 		
-				if (initSockets(serverIp) != 0) {
+				if (connectSocket(serverIp) != 0) {
 					sendStatusMsg("Could not connect.");
 				} else {
 					sendStatusMsg("Successfully connected. Press 'a' to chat!");
@@ -143,13 +138,19 @@ int main() {
 				if (strcmp(settings_cfg.favServer, "NOTSET") == 0) {
 					sendStatusMsg("You need to set a favorite server!");
 				} else {
-					if (initSockets(settings_cfg.favServer) != 0) {
+					int ret;
+					if ((ret = (connectSocket(settings_cfg.favServer)) != 0)) {
 						sendStatusMsg("Could not connect.");
 					} else {
 						sendStatusMsg("Successfully connected. Press 'a' to chat!");
 						hasConn = true;
 					}
 				}
+			} else if (kDown & KEY_B && hasConn == true) {
+				hasConn = false;
+				serverSend("EXIT.", "");
+				exitSocket();
+				sendStatusMsg("Disconnected from server");
 			}
 			
 			drawHud("Chat", spriteSheet);
@@ -159,7 +160,7 @@ int main() {
 			C2D_TargetClear(bot, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
 			C2D_SceneBegin(bot);
 		
-			text("3dsChat Client Alpha v1.3", 0, 0, 0.5f, ALIGN_LEFT);
+			text("3dsChat Client Alpha v1.4", 0, 0, 0.5f, ALIGN_LEFT);
 		
 			C2D_DrawImageAt(C2D_SpriteSheetGetImage(spriteSheet, APP_ICON), 90, 40, 0.0f, NULL, 2, 2);
 		} else if (isOn == SETTINGS) {
@@ -174,23 +175,14 @@ int main() {
 			C2D_TargetClear(bot, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));
 			C2D_SceneBegin(bot);
 			
-			drawSettings();
+			drawSettings(&settings_cfg);
 			
 			if (kDown & KEY_UP) {
 				moveCfgPointer(0);
 			} else if (kDown & KEY_DOWN) {
 				moveCfgPointer(1);
 			}
-			/*
-			char your_age[10];
-			char settingName[50];
-			itoa(settings_cfg.age, your_age, 10);
-			snprintf(settingName, sizeof(settingName), "Your name: %s", settings_cfg.name);
-			if (strcmp(settings_cfg.name, "NOTSET") != 0) {
-				text(settingName, 0, 0, 0.5f, ALIGN_LEFT);
-			} else {
-				text("You have not set a name.", 0, 0, 0.5f, ALIGN_LEFT);
-			}*/
+			
 			if (kDown & KEY_A) {
 				performCfgAction(&settings_cfg);
 			} else if (kDown & KEY_SELECT) {
@@ -214,26 +206,4 @@ int main() {
 	exitSocket();
 	socExit();
 	return 0;
-}
-
-void failExit(const char *fmt, ...) {
-
-	//if(sock>0) close(sock);
-
-	va_list ap;
-
-	printf(CONSOLE_RED);
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
-	printf(CONSOLE_RESET);
-	printf("\nPress B to exit\n");
-
-	while (aptMainLoop()) {
-		gspWaitForVBlank();
-		hidScanInput();
-
-		u32 kDown = hidKeysDown();
-		if (kDown & KEY_B) exit(0);
-	}
 }
