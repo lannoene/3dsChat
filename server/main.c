@@ -129,7 +129,6 @@ int connectSock() {
 
 int sendMessageToAll(char* header, char* message, char* name) {
 	printf("sending head: %s, Body: %s\n", header, message);
-	int iSendResult = 0;
 	
 	resetMsgVars(true, true);
 	
@@ -159,8 +158,6 @@ int main() {
 	int iResult;
 	
 	printf("3dsChat SERVER alpha v1.4\n");
-	//printf("How many clients? (For now, you need to fill the server up before chatting)\n");
-	//scanf("%d", &num_sockets);
 	
 	//connect a new socket command
 	connectSock();
@@ -235,7 +232,6 @@ int main() {
 		if (kbhit()) {
 			char kPres = getch();
 			char youTyped[BODY_SIZE];
-			//printf("%c\n", c);
 			if (kPres == 't') {//send custom server message
 				printf("Your message to send to them: ");
 				fgets(youTyped, BODY_SIZE, stdin);
@@ -284,7 +280,6 @@ int main() {
 					printf("Body: %s\n", recvMsg.msgBody);
 					printf("Head: %s\n", recvMsg.msgHead);
 					snprintf(bodyer, SEND_SIZE, "%s", recvMsg.msgBody);
-					printf("%s\n", sendMsg.msgBody);
 					strcpy(header, recvMsg.msgHead);
 					
 					//send the message to everyone

@@ -49,7 +49,7 @@ int main() {
 		}
 	}
 	
-	g_dynamicBuf = C2D_TextBufNew(4096); // support up to 4096 glyphs in the buffer
+	g_dynamicBuf = C2D_TextBufNew(16384); // support up to 4096 glyphs in the buffer
 	
 	top = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
 	bot = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);

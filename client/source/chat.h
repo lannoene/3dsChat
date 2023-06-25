@@ -4,7 +4,7 @@
 #define HEADER_SIZE 32
 #define NAME_SIZE 20
 #define BODY_SIZE SEND_SIZE - HEADER_SIZE - NAME_SIZE
-#define MAX_LOG 250
+#define MAX_LOG 20
 
 #include <jansson.h>
 #include <stdarg.h>
@@ -24,3 +24,4 @@ void serverSend(char* header, char* body);
 void sendStatusMsg(char* message, ...);
 void exitSocket();
 void debugMsg(char* message);
+void offsetAllItemsDownByOne();

@@ -71,7 +71,7 @@ void recvChat() {
 
 	int return_value = poll(&sock_descriptor, 1, 0);
 
-		if (return_value == -1) {
+	if (return_value == -1) {
 		printf("%s", strerror(errno));
 	} else if (return_value == 0) {
 		//printf("No data available to be read");
@@ -86,13 +86,21 @@ void recvChat() {
 		if (strstr(recvMsg.msgHead, "EXIT.") != 0) {
 			return;
 		} else if (strstr(recvMsg.msgHead, "TEXT.") != 0) {
-			//printf("%s\n", recvMsg.msgBody);
-			strcpy(logMsgs[recvdMsgs].msgBody, recvMsg.msgBody);
-			strcpy(logMsgs[recvdMsgs].msgName, recvMsg.msgName);
-			++recvdMsgs;
+			if (recvdMsgs < MAX_LOG) {
+				strcpy(logMsgs[recvdMsgs].msgBody, recvMsg.msgBody);
+				strcpy(logMsgs[recvdMsgs].msgName, recvMsg.msgName);
+				strcpy(logMsgs[recvdMsgs].msgHead, recvMsg.msgHead);
+				++recvdMsgs;
+			} else {
+				offsetAllItemsDownByOne();
+				strcpy(logMsgs[MAX_LOG - 1].msgBody, recvMsg.msgBody);
+				strcpy(logMsgs[MAX_LOG - 1].msgName, recvMsg.msgName);
+				strcpy(logMsgs[MAX_LOG - 1].msgHead, recvMsg.msgHead);
+			}
+			
 		} else if (strstr(recvMsg.msgHead, "IMAGE.") != 0) {
-			puts("feature not implimented yet! XD");
-			++recvdMsgs;
+			/*puts("feature not implimented yet! XD");
+			++recvdMsgs;*/
 		} else if (strstr(recvMsg.msgHead, "STATUS.") != 0) {
 			sendStatusMsg(recvMsg.msgBody);
 		}
@@ -145,7 +153,6 @@ void sendMsgSocket(struct jsonParse *config) {
 		sendStatusMsg("Could not send message (server may be offline)");
 		return;
 	}
-	//printf("Sent: %s\n", sendMsg);
 }
 
 int initSocket() {
@@ -204,6 +211,8 @@ int connectSocket(char* serverIp) {
 		hidScanInput();
 		u32 kDown = hidKeysDown();
 		if (kDown & KEY_START) {
+			close(sock);
+			debugMsg("Connection aborted by user.");
 			return 1;
 		}
 		if (return_value == -1) {
@@ -250,9 +259,15 @@ void serverSend(char* header, char* body) {
 void debugMsg(char* message) {
 	extern struct jsonParse settings_cfg;
 	if (settings_cfg.showDebugMsgs == true) {
-		strcpy(logMsgs[recvdMsgs].msgHead, "STATUS.");
-		strcpy(logMsgs[recvdMsgs].msgBody, message);
-		++recvdMsgs;
+		if (recvdMsgs < MAX_LOG) {
+			strcpy(logMsgs[recvdMsgs].msgHead, "STATUS.");
+			strcpy(logMsgs[recvdMsgs].msgBody, message);
+			++recvdMsgs;
+		} else {
+			offsetAllItemsDownByOne();
+			strcpy(logMsgs[MAX_LOG - 1].msgHead, "STATUS.");
+			strcpy(logMsgs[MAX_LOG - 1].msgBody, message);
+		}
 	}
 }
 void sendStatusMsg(char* messageTmp, ...) {
@@ -262,7 +277,6 @@ void sendStatusMsg(char* messageTmp, ...) {
 		va_list ap;
 		va_start(ap, messageTmp);
 		char out[200] = {0};
-		int insertIndex = 0;
 		char* token;
 		token = strtok(message, "%");
 		while (token != NULL) {
@@ -284,9 +298,15 @@ void sendStatusMsg(char* messageTmp, ...) {
 		va_end(ap);
 	}
 	
-	strcpy(logMsgs[recvdMsgs].msgHead, "STATUS.");
-	strcpy(logMsgs[recvdMsgs].msgBody, message);
-	++recvdMsgs;
+	if (recvdMsgs < MAX_LOG) {
+		strcpy(logMsgs[recvdMsgs].msgHead, "STATUS.");
+		strcpy(logMsgs[recvdMsgs].msgBody, message);
+		++recvdMsgs;
+	} else {
+		offsetAllItemsDownByOne();
+		strcpy(logMsgs[MAX_LOG - 1].msgHead, "STATUS.");
+		strcpy(logMsgs[MAX_LOG - 1].msgBody, message);
+	}
 }
 
 
@@ -294,3 +314,10 @@ void exitSocket() {
 	close(sock);
 }
 
+void offsetAllItemsDownByOne() {
+	for (int i = 0; i < MAX_LOG - 1; i++) {
+		strcpy(logMsgs[i].msgHead, logMsgs[i + 1].msgHead);
+		strcpy(logMsgs[i].msgBody, logMsgs[i + 1].msgBody);
+		strcpy(logMsgs[i].msgName, logMsgs[i + 1].msgName);
+	}
+}

@@ -1,1 +1,10 @@
 *.txt
+*.o
+*.exe
+*.3dsx
+*.smdh
+*.elf
+*.d
+*.lst
+*.map
+*/build
