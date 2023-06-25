@@ -1,12 +1,3 @@
-/*
-* lannoene here! I'm probably not going to continue working on this project
-* it doesn't seem to be getting very much attention, which is fair I guess
-* though, it does mean I can just quit and nobody will care XD
-* so that's what I'm doing.
-* sorry!
-* if you need any bug fixes done, submit a request and I may fix it.
-*/
-
 #include <stdio.h>
 #include <winsock2.h>
 #include <stdbool.h>
@@ -129,6 +120,7 @@ int connectSock() {
 
 int sendMessageToAll(char* header, char* message, char* name) {
 	printf("sending head: %s, Body: %s\n", header, message);
+	int iSendResult = 0;
 	
 	resetMsgVars(true, true);
 	
@@ -140,7 +132,7 @@ int sendMessageToAll(char* header, char* message, char* name) {
 		if (ClientSockets[f].isConnected == false) {
 			continue;
 		}
-		//casting the struct to a char pointer because that's what sockets wants even though it doesn't even do anything 🙄
+		//casting the struct to a char pointer because that's what sockets wants even though it doesn't do anything
 		iSendResult = send(ClientSockets[f].sock, (char*)&sendMsg, sizeof(sendMsg), 0);
 		if (iSendResult == SOCKET_ERROR) {
 			printf("send failed: %d\n", WSAGetLastError());
@@ -168,7 +160,6 @@ int main() {
 	printf("Server address: %s\n", inet_ntoa(*(struct in_addr *) *thisHost->h_addr_list));
 	
 	char recvbuf[DEFAULT_BUFLEN];
-	int iSendResult;
 	int recvbuflen = DEFAULT_BUFLEN;
 	
 	printf("Press 't' to chat.\n");
@@ -177,21 +168,23 @@ int main() {
 	char header[HEADER_SIZE];
 	char bodyer[BODY_SIZE];
 	WSAEVENT NewEvent[1];
-	
+	WSANETWORKEVENTS NetworkEvents;
 	//create wsapoll data
 	WSAPOLLFD fdarray = {0};
 	
 	for (int i = 0; i < MAX_SOCKETS; i++) {
 		ClientSockets[i].isConnected = false;
 	}
+	//winsock event var
+	NewEvent[0] = WSACreateEvent();
+	
+	// with the listening socket and NewEvent listening for FD_ACCEPT
+	WSAEventSelect(ListenSocket, NewEvent[0], FD_ACCEPT);
+	
 	
 	// Receive until the peer shuts down the connection
 	while (true) {
 		//deal with incoming clients
-		//winsock event var
-		NewEvent[0] = WSACreateEvent();
-		// with the listening socket and NewEvent listening for FD_ACCEPT
-		WSAEventSelect(ListenSocket, NewEvent[0], FD_ACCEPT);
 		//no documentation... thank god for this single post pointing me in the right direction: https://stackoverflow.com/a/72793077
 		iResult = WSAWaitForMultipleEvents(1, NewEvent, FALSE, 0, FALSE);
 		//puts("waiting..");
@@ -220,10 +213,20 @@ int main() {
 				send(ClientSockets[currentConnectingSocket].sock, (char*)&OK_HANDSHAKE, sizeof(OK_HANDSHAKE), 0);//perform handshake
 				ClientSockets[currentConnectingSocket].isConnected = true;
 				
+				int rResult = WSAEnumNetworkEvents(ListenSocket, NewEvent[0], &NetworkEvents);
+				
+				if (rResult < 0) {
+					printf("error");
+				} else {
+					printf("%d", iResult);
+				}
+				
 			}
 			puts("closed listen sock");
 			closesocket(ListenSocket);
 			connectSock();
+			// with the listening socket and NewEvent listening for FD_ACCEPT
+			WSAEventSelect(ListenSocket, NewEvent[0], FD_ACCEPT);
 		}
 		iResult = 0;
 		
