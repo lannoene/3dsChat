@@ -163,6 +163,11 @@ int main() {
 			text("3dsChat Client Alpha v1.4", 0, 0, 0.5f, ALIGN_LEFT);
 		
 			C2D_DrawImageAt(C2D_SpriteSheetGetImage(spriteSheet, APP_ICON), 90, 40, 0.0f, NULL, 2, 2);
+			
+			if (hasConn == true) {
+				displayUserList();
+			}
+			
 		} else if (isOn == SETTINGS) {
 			//render top screen
 			C2D_TargetClear(top, C2D_Color32f(1.0f, 1.0f, 1.0f, 1.0f));

@@ -8,7 +8,7 @@ LDFLAGS += -lws2_32
 HDRS :=
 
 # add source files here
-SRCS := main.c
+SRCS := main.c sockets.h sockets.c
 
 # generate names of object files
 OBJS := $(SRCS:.c=.o)

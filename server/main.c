@@ -4,6 +4,7 @@
 #include <ws2tcpip.h>
 #include <string.h>
 #include <conio.h>
+#include <time.h>
 
 #define DEFAULT_PORT "80"
 #define DEFAULT_BUFLEN 512
@@ -145,8 +146,20 @@ int sendMessageToAll(char* header, char* message, char* name) {
 	return 0;
 }
 
-int main() {
+void sendUserList() {
+	connected_sockets = 0;
+	for (int i = 0; i < MAX_SOCKETS; i++) {
+		if (ClientSockets[i].isConnected == true) {
+			++connected_sockets;
+		}
+	}
+	char userListNum[50];
+	snprintf(userListNum, 50, "%d", connected_sockets);
+	sendMessageToAll("USERUPDATE.", userListNum, "Server");
+}
 
+
+int main() {
 	int iResult;
 	
 	printf("3dsChat SERVER alpha v1.4\n");
@@ -181,9 +194,11 @@ int main() {
 	// with the listening socket and NewEvent listening for FD_ACCEPT
 	WSAEventSelect(ListenSocket, NewEvent[0], FD_ACCEPT);
 	
-	
 	// Receive until the peer shuts down the connection
 	while (true) {
+		bool hasUserConnectedThisTick = false;
+		
+		Sleep(100);//don't want to use up too much resources
 		//deal with incoming clients
 		//no documentation... thank god for this single post pointing me in the right direction: https://stackoverflow.com/a/72793077
 		iResult = WSAWaitForMultipleEvents(1, NewEvent, FALSE, 0, FALSE);
@@ -220,13 +235,14 @@ int main() {
 				} else {
 					printf("%d", iResult);
 				}
-				
+				hasUserConnectedThisTick = true;
 			}
 			puts("closed listen sock");
 			closesocket(ListenSocket);
 			connectSock();
 			// with the listening socket and NewEvent listening for FD_ACCEPT
 			WSAEventSelect(ListenSocket, NewEvent[0], FD_ACCEPT);
+			sendUserList();
 		}
 		iResult = 0;
 		
@@ -263,6 +279,7 @@ int main() {
 				ClientSockets[f].isConnected = false;
 				printf("POLL ERR.Disconnecting client socket.\n");
 				closesocket(ClientSockets[f].sock);
+				sendUserList();
 				continue;
 			} else {
 				if (fdarray.revents & POLLRDNORM) {
@@ -277,6 +294,7 @@ int main() {
 						char leftMsg[20];
 						snprintf(leftMsg, 20, "Client #%d left", f);
 						sendMessageToAll("STATUS.", leftMsg, "Server");
+						sendUserList();
 						continue;
 						//return 0;
 					}

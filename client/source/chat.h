@@ -6,12 +6,13 @@
 #define BODY_SIZE SEND_SIZE - HEADER_SIZE - NAME_SIZE
 #define MAX_LOG 20
 
+#define MAX_USERS 50
+#define MAX_NAME 20
+
 #include <jansson.h>
 #include <stdarg.h>
 
 #include "config.h"
-
-
 
 void resetMsgVars(bool resetRecv, bool resetSend);
 void recvChat();
@@ -25,3 +26,5 @@ void sendStatusMsg(char* message, ...);
 void exitSocket();
 void debugMsg(char* message);
 void offsetAllItemsDownByOne();
+void recvUserList();
+void displayUserList();

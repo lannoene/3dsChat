@@ -44,10 +44,16 @@ struct Smessage {
 	char msgName[NAME_SIZE];
 } sendMsg;
 
+struct ConnUsers {
+	char name[MAX_NAME];
+	unsigned long userId;
+} users[MAX_USERS];
+
 int recvdMsgs = 0;
 s32 sock = -1;
 static u32 *SOC_buffer = NULL;
 struct pollfd sock_descriptor;
+unsigned long connectedUserCount = 0;
 
 void resetMsgVars(bool resetRecv, bool resetSend) {
 	if (resetRecv == true) {
@@ -103,6 +109,8 @@ void recvChat() {
 			++recvdMsgs;*/
 		} else if (strstr(recvMsg.msgHead, "STATUS.") != 0) {
 			sendStatusMsg(recvMsg.msgBody);
+		} else if (strstr(recvMsg.msgHead, "USERUPDATE.") != 0) {
+			recvUserList();
 		}
 	} else if (iResult == 0) {
 		
@@ -216,7 +224,7 @@ int connectSocket(char* serverIp) {
 			return 1;
 		}
 		if (return_value == -1) {
-			debugMsg("Could not poll socket.");
+			debugMsg("Could not poll socket. This can happen if you're offline.");
 			return 2;
 		}
 		if (sock_descriptor.revents & POLLIN) {
@@ -320,4 +328,17 @@ void offsetAllItemsDownByOne() {
 		strcpy(logMsgs[i].msgBody, logMsgs[i + 1].msgBody);
 		strcpy(logMsgs[i].msgName, logMsgs[i + 1].msgName);
 	}
+}
+
+char userListNum[50];
+void recvUserList() {
+	connectedUserCount = atoi(recvMsg.msgBody);
+	snprintf(userListNum, 50, "Users connected: %ld", connectedUserCount);
+}
+
+void displayUserList() {
+	/*for (int i = 0; i < connectedUserCount; i++) {
+		
+	}*/
+	text(userListNum, 0, 15, 0.5f, ALIGN_LEFT);
 }
