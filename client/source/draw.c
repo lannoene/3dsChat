@@ -2,8 +2,8 @@
 #include <time.h>
 #include "draw.h"
 
-extern C2D_TextBuf g_dynamicBuf;
-C2D_Text dynText;
+static C2D_TextBuf g_dynamicBuf;
+static C2D_Text dynText;
 
 void text(char* yourText, int x, int y, float scale, int displType) {
 	C2D_TextParse(&dynText, g_dynamicBuf, yourText);
@@ -21,7 +21,7 @@ void drawImage(int image, int x, int y, float scale) {
 }
 
 void initSheet() {
-	
+	g_dynamicBuf = C2D_TextBufNew(16384); // support up to 4096 glyphs in the buffer
 }
 
 void drawHud(char* heading, C2D_SpriteSheet spriteSheet) {

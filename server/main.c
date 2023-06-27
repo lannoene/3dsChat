@@ -22,6 +22,7 @@ int connected_sockets = 0;
 struct clients {
 	SOCKET sock;
 	bool isConnected;
+	char name[NAME_SIZE];
 } ClientSockets[MAX_SOCKETS];
 SOCKET ListenSocket = INVALID_SOCKET;
 
@@ -34,7 +35,6 @@ struct Smessage {
 struct Rmessage {
 	char msgHead[HEADER_SIZE];
 	char msgBody[BODY_SIZE];
-	char msgName[NAME_SIZE];
 } recvMsg;
 
 static inline void resetMsgVars(bool resetRecv, bool resetSend) {
@@ -180,8 +180,10 @@ int main() {
 	
 	char header[HEADER_SIZE];
 	char bodyer[BODY_SIZE];
+	
 	WSAEVENT NewEvent[1];
 	WSANETWORKEVENTS NetworkEvents;
+	
 	//create wsapoll data
 	WSAPOLLFD fdarray = {0};
 	
@@ -196,13 +198,14 @@ int main() {
 	
 	// Receive until the peer shuts down the connection
 	while (true) {
-		bool hasUserConnectedThisTick = false;
-		
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+
 		Sleep(100);//don't want to use up too much resources
 		//deal with incoming clients
 		//no documentation... thank god for this single post pointing me in the right direction: https://stackoverflow.com/a/72793077
 		iResult = WSAWaitForMultipleEvents(1, NewEvent, FALSE, 0, FALSE);
-		//puts("waiting..");
+
 		if (iResult == WSA_WAIT_EVENT_0) {
 			// Accept a client socket
 			int currentConnectingSocket;
@@ -235,7 +238,6 @@ int main() {
 				} else {
 					printf("%d", iResult);
 				}
-				hasUserConnectedThisTick = true;
 			}
 			puts("closed listen sock");
 			closesocket(ListenSocket);
@@ -296,33 +298,23 @@ int main() {
 						sendMessageToAll("STATUS.", leftMsg, "Server");
 						sendUserList();
 						continue;
-						//return 0;
-					}
-					printf("Body: %s\n", recvMsg.msgBody);
-					printf("Head: %s\n", recvMsg.msgHead);
-					snprintf(bodyer, SEND_SIZE, "%s", recvMsg.msgBody);
-					strcpy(header, recvMsg.msgHead);
-					
-					//send the message to everyone
-					if (strcmp(recvMsg.msgName, "NOTSET") == 0) {
-						char tmpName[20];
-						snprintf(tmpName, 20, "Client #%d", f);
-						sendMessageToAll(header, bodyer, tmpName);
-					} else {
-						sendMessageToAll(header, bodyer, recvMsg.msgName);
+					} else if (strstr(recvMsg.msgHead, "NAMEUPDATE.") != 0) {
+						if (strcmp(recvMsg.msgBody, "NOTSET") == 0) {
+							char tmpName[20];
+							snprintf(ClientSockets[f].name, NAME_SIZE, "Client #%d", f);
+						} else {
+							strcpy(ClientSockets[f].name, recvMsg.msgBody);
+						}
+					} else if (strstr(recvMsg.msgHead, "TEXT.") != 0) {
+						snprintf(bodyer, SEND_SIZE, "%s", recvMsg.msgBody);
+						strcpy(header, recvMsg.msgHead);
+
+						//send the message to everyone
+						sendMessageToAll(header, bodyer, ClientSockets[f].name);
 					}
 				}
 			}
-			
-			
-			if (iResult > 0) {
-				printf("Bytes received: %d: %s\n", iResult, recvbuf);
-				
-			} else if (iResult == 0) {
-				//printf("Listen request timed out\n");
-			} else {
-				printf("recv failed: %d\n", WSAGetLastError());
-			}
+
 			iResult = 0;
 		}
 	}

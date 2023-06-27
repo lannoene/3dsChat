@@ -13,16 +13,17 @@ enum settingsActions {
 	CHANGE_FAV_SERVER,
 	RESET_SETTINGS,
 	SHOW_PINGS,
-	DEBUG_MESSAGES
+	DEBUG_MESSAGES,
+	CLEAR_CHAT_WITH_NEW_CONN
 };
 
 struct stat st = {0};
 
 static struct jsonParse settings_config_tmp;
 
-char settingsLabels[MAX_SETTINGS][50] = {"Username", "Favorite Server (quick connect by pressing 'Y')", "Reset Settings", "Show pings (@username)", "Show debug messages (for testers)"};
+char settingsLabels[MAX_SETTINGS][50] = {"Username", "Favorite Server (quick connect by pressing 'Y')", "Reset Settings", "Show pings (@username)", "Show debug messages (for testers)", "Clear chat when you connect to a new server"};
 
-int writeSettings() {
+int writeDefaultSettings() {
 	if (stat("3dsChat", &st)<0) {
 		mkdir("3dsChat", 0700);
 	}
@@ -36,9 +37,9 @@ int writeSettings() {
 		json_object_set_new(settings_obj, "fav_server", json_string("NOTSET"));
 		json_object_set_new(settings_obj, "show_pings", json_boolean(true));
 		json_object_set_new(settings_obj, "show_debug_messages", json_boolean(false));
+		json_object_set_new(settings_obj, "clear_chat_when_conn", json_boolean(false));
 		json_object_set_new(root, "settings", settings_obj);
 	
-		//json_object_set_new(root, ENTRIES_STRING, pls_json_arr);
 		json_dump_file(root, "3dsChat/settings.json", JSON_INDENT(8));
 		json_decref(root);
 	}
@@ -92,6 +93,10 @@ void parseEntries(json_t* entries_elem) {
 			if (json_is_boolean(value)) {
 				settings_config_tmp.showDebugMsgs = json_boolean_value(value);
 			}
+		} else if (strcmp(key, "clear_chat_when_conn") == 0) {
+			if (json_is_boolean(value)) {
+				settings_config_tmp.clearChatWhenConn = json_boolean_value(value);
+			}
 		}
 		
 		iter = json_object_iter_next(entries_elem, iter);
@@ -106,7 +111,8 @@ void saveJson(struct jsonParse *config) {
 	json_object_set_new(settings_obj, "name", json_string(config->name));
 	json_object_set_new(settings_obj, "fav_server", json_string(config->favServer));
 	json_object_set_new(settings_obj, "show_pings", json_boolean(config->showPings));
-		json_object_set_new(settings_obj, "show_debug_messages", json_boolean(config->showDebugMsgs));
+	json_object_set_new(settings_obj, "show_debug_messages", json_boolean(config->showDebugMsgs));
+	json_object_set_new(settings_obj, "clear_chat_when_conn", json_boolean(config->clearChatWhenConn));
 	json_object_set_new(root, "settings", settings_obj);
 	
 	//json_object_set_new(root, ENTRIES_STRING, pls_json_arr);
@@ -136,6 +142,13 @@ void drawSettings(struct jsonParse *config) {
 				snprintf(boolLabel, sizeof(settingsLabels) + 1, "%s [off]", settingsLabels[i]);
 			}
 			text(boolLabel, 9, i*15, 0.5f, ALIGN_LEFT);
+		} else if (i == CLEAR_CHAT_WITH_NEW_CONN) {
+			if (config->clearChatWhenConn == true) {
+				snprintf(boolLabel, sizeof(settingsLabels) + 1, "%s [on]", settingsLabels[i]);
+			} else {
+				snprintf(boolLabel, sizeof(settingsLabels) + 1, "%s [off]", settingsLabels[i]);
+			}
+			text(boolLabel, 9, i*15, 0.5f, ALIGN_LEFT);
 		} else {
 			text(settingsLabels[i], 9, i*15, 0.5f, ALIGN_LEFT);
 		}
@@ -155,6 +168,7 @@ void resetSettings(struct jsonParse *config) {
 	strcpy(config->name, "NOTSET");
 	config->showPings = true;
 	config->showDebugMsgs = false;
+	config->clearChatWhenConn = false;
 }
 
 void truncateTrailingSpaces(struct jsonParse *config) {
@@ -201,6 +215,9 @@ void performCfgAction(struct jsonParse *config) {
 		break;
 		case DEBUG_MESSAGES:
 			config->showDebugMsgs = !config->showDebugMsgs;
+		break;
+		case CLEAR_CHAT_WITH_NEW_CONN:
+			config->clearChatWhenConn = !config->clearChatWhenConn;
 		break;
 	}
 }

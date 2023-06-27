@@ -22,7 +22,6 @@
 #include "chat.h"
 #include "config.h"
 
-C2D_TextBuf g_dynamicBuf;
 C3D_RenderTarget* top;
 C3D_RenderTarget* bot;
 
@@ -34,9 +33,13 @@ enum isOnnum {
 
 struct jsonParse settings_cfg;
 
-int main() {
+[]
+
+char oldName[NAME_SIZE];
+int main(void) {
 	gfxInitDefault();
 	citroInit();
+	initSheet();
 	
 	if (chdir("sdmc:/3ds") != 0) {
 		if (!mkdir("sdmc:/3ds", 0700)) {
@@ -49,12 +52,10 @@ int main() {
 		}
 	}
 	
-	g_dynamicBuf = C2D_TextBufNew(16384); // support up to 4096 glyphs in the buffer
-	
 	top = C2D_CreateScreenTarget(GFX_TOP, GFX_LEFT);
 	bot = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
 	
-	writeSettings();
+	writeDefaultSettings();
 	
 	settings_cfg = checkSettings();
 	
@@ -71,7 +72,6 @@ int main() {
 		u32 kDown = hidKeysDown();
 		
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-		
 		
 		if (kDown & KEY_START) {
 			printf("Both the client and server must exit. Sorry about that!\n");
@@ -126,10 +126,15 @@ int main() {
 				if (connectSocket(serverIp) != 0) {
 					sendStatusMsg("Could not connect.");
 				} else {
+					if (settings_cfg.clearChatWhenConn == true) {
+						resetChatConsole();
+					}
 					sendStatusMsg("Successfully connected. Press 'a' to chat!");
 					hasConn = true;
+					sendCurrentUserInfo(&settings_cfg);
 				}
 			} else if (kDown & KEY_SELECT) {
+				snprintf(oldName, 20, "%s", settings_cfg.name);
 				isOn = SETTINGS;
 				extern int userPointer;
 				userPointer = 0;
@@ -142,8 +147,12 @@ int main() {
 					if ((ret = (connectSocket(settings_cfg.favServer)) != 0)) {
 						sendStatusMsg("Could not connect.");
 					} else {
+						if (settings_cfg.clearChatWhenConn == true) {
+							resetChatConsole();
+						}
 						sendStatusMsg("Successfully connected. Press 'a' to chat!");
 						hasConn = true;
+						sendCurrentUserInfo(&settings_cfg);
 					}
 				}
 			} else if (kDown & KEY_B && hasConn == true) {
@@ -191,6 +200,10 @@ int main() {
 			if (kDown & KEY_A) {
 				performCfgAction(&settings_cfg);
 			} else if (kDown & KEY_SELECT) {
+				if (strcmp(settings_cfg.name, oldName) != 0 && hasConn == true) {
+					sendCurrentUserInfo(&settings_cfg);
+					debugMsg("Upadated user info.");
+				}
 				saveJson(&settings_cfg);
 				isOn = CHAT;
 			}
@@ -206,7 +219,7 @@ int main() {
 	C2D_Fini();
 	C3D_Fini();
 	gfxExit();
-	
+
 	serverSend("EXIT.", "");
 	exitSocket();
 	socExit();

@@ -28,3 +28,5 @@ void debugMsg(char* message);
 void offsetAllItemsDownByOne();
 void recvUserList();
 void displayUserList();
+void resetChatConsole();
+void sendCurrentUserInfo();

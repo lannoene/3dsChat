@@ -1,7 +1,7 @@
 #pragma once
 
 #define DOES_NOT_EXIST -1
-#define MAX_SETTINGS 5
+#define MAX_SETTINGS 6
 #include <jansson.h>
 #include <stdbool.h>
 #include <stdbool.h>
@@ -11,9 +11,10 @@ struct jsonParse {
 	char favServer[16];
 	bool showPings;
 	bool showDebugMsgs;
+	bool clearChatWhenConn;
 };
 
-int writeSettings();
+int writeDefaultSettings();
 struct jsonParse checkSettings();
 void parseEntries(json_t* entries_elem);
 void saveJson(struct jsonParse *config);

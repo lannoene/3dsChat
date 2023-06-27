@@ -41,7 +41,6 @@ struct Rmessage {
 struct Smessage {
 	char msgHead[HEADER_SIZE];
 	char msgBody[BODY_SIZE];
-	char msgName[NAME_SIZE];
 } sendMsg;
 
 struct ConnUsers {
@@ -156,7 +155,7 @@ void sendMsgSocket(struct jsonParse *config) {
 	swkbdSetHintText(&swkbd, "Send message!");
 	int button = swkbdInputText(&swkbd, sendMsg.msgBody, sizeof(sendMsg.msgBody));
 	strcpy(sendMsg.msgHead, "TEXT.");
-	strcpy(sendMsg.msgName, config->name);
+	//strcpy(sendMsg.msgName, config->name);
 	if (button == 2 && send(sock, &sendMsg, sizeof(sendMsg), 0) < 0) {
 		sendStatusMsg("Could not send message (server may be offline)");
 		return;
@@ -341,4 +340,12 @@ void displayUserList() {
 		
 	}*/
 	text(userListNum, 0, 15, 0.5f, ALIGN_LEFT);
+}
+
+void resetChatConsole() {
+	recvdMsgs = 0;
+}
+
+void sendCurrentUserInfo(struct jsonParse *config) {
+	serverSend("NAMEUPDATE.", config->name);
 }
