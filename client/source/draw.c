@@ -20,7 +20,7 @@ void drawImage(int image, int x, int y, float scale) {
 	
 }
 
-void initSheet() {
+void initSheet(void) {
 	g_dynamicBuf = C2D_TextBufNew(16384); // support up to 4096 glyphs in the buffer
 }
 
@@ -66,7 +66,7 @@ void drawHud(char* heading, C2D_SpriteSheet spriteSheet) {
 	}
 }
 
-int drawOptionsMenu() {
+int drawOptionsMenu(void) {
 	
 	C2D_DrawRectSolid(0, 0, 0, 400, 20, C2D_Color32f(0.5f, 0.5f, 0.5f, 1.0f));
 	

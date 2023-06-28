@@ -33,8 +33,6 @@ enum isOnnum {
 
 struct jsonParse settings_cfg;
 
-[]
-
 char oldName[NAME_SIZE];
 int main(void) {
 	gfxInitDefault();
@@ -200,11 +198,11 @@ int main(void) {
 			if (kDown & KEY_A) {
 				performCfgAction(&settings_cfg);
 			} else if (kDown & KEY_SELECT) {
+				saveJson(&settings_cfg);
 				if (strcmp(settings_cfg.name, oldName) != 0 && hasConn == true) {
 					sendCurrentUserInfo(&settings_cfg);
 					debugMsg("Upadated user info.");
 				}
-				saveJson(&settings_cfg);
 				isOn = CHAT;
 			}
 		}

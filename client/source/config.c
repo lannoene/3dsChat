@@ -23,7 +23,7 @@ static struct jsonParse settings_config_tmp;
 
 char settingsLabels[MAX_SETTINGS][50] = {"Username", "Favorite Server (quick connect by pressing 'Y')", "Reset Settings", "Show pings (@username)", "Show debug messages (for testers)", "Clear chat when you connect to a new server"};
 
-int writeDefaultSettings() {
+int writeDefaultSettings(void) {
 	if (stat("3dsChat", &st)<0) {
 		mkdir("3dsChat", 0700);
 	}
@@ -47,7 +47,7 @@ int writeDefaultSettings() {
 	return 0;
 }
 
-struct jsonParse checkSettings() {
+struct jsonParse checkSettings(void) {
 	json_error_t* pjsonError = NULL;
 	json_t* pJson = json_load_file("3dsChat/settings.json", 0, pjsonError);
 	

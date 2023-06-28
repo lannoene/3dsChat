@@ -14,8 +14,8 @@ struct jsonParse {
 	bool clearChatWhenConn;
 };
 
-int writeDefaultSettings();
-struct jsonParse checkSettings();
+int writeDefaultSettings(void);
+struct jsonParse checkSettings(void);
 void parseEntries(json_t* entries_elem);
 void saveJson(struct jsonParse *config);
 void drawSettings(struct jsonParse *config);

@@ -15,18 +15,18 @@
 #include "config.h"
 
 void resetMsgVars(bool resetRecv, bool resetSend);
-void recvChat();
-void sendMsgSocket();
-int initSocket();
-int connectSocket();
+void recvChat(void);
+void sendMsgSocket(struct jsonParse *config);
+int initSocket(void);
+int connectSocket(char* serverIp);
 void moveChat(int way);
 void displayChat(struct jsonParse *config);
 void serverSend(char* header, char* body);
 void sendStatusMsg(char* message, ...);
 void exitSocket();
 void debugMsg(char* message);
-void offsetAllItemsDownByOne();
-void recvUserList();
-void displayUserList();
-void resetChatConsole();
-void sendCurrentUserInfo();
+void offsetAllItemsDownByOne(void);
+void recvUserList(void);
+void displayUserList(void);
+void resetChatConsole(void);
+void sendCurrentUserInfo(struct jsonParse *config);

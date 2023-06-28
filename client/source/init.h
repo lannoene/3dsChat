@@ -1,3 +1,3 @@
 #pragma once
 
-void citroInit();
+void citroInit(void);

@@ -113,7 +113,7 @@ int connectSock() {
 		printf("Listen failed with error: %d\n", WSAGetLastError());
 		closesocket(ListenSocket);
 		WSACleanup();
-		return 1;
+		return 1; 
 	}
 	
 	return 0;
@@ -172,9 +172,6 @@ int main() {
 	thisHost = gethostbyname("");
 	printf("Server address: %s\n", inet_ntoa(*(struct in_addr *) *thisHost->h_addr_list));
 	
-	char recvbuf[DEFAULT_BUFLEN];
-	int recvbuflen = DEFAULT_BUFLEN;
-	
 	printf("Press 't' to chat.\n");
 	
 	
@@ -189,6 +186,7 @@ int main() {
 	
 	for (int i = 0; i < MAX_SOCKETS; i++) {
 		ClientSockets[i].isConnected = false;
+		strcpy(ClientSockets[i].name, "NOTSET");
 	}
 	//winsock event var
 	NewEvent[0] = WSACreateEvent();
@@ -231,6 +229,7 @@ int main() {
 				send(ClientSockets[currentConnectingSocket].sock, (char*)&OK_HANDSHAKE, sizeof(OK_HANDSHAKE), 0);//perform handshake
 				ClientSockets[currentConnectingSocket].isConnected = true;
 				
+				//the reason we made newEvent an array is because WSAenumNE needs it to be an array for some reason...? Idk tho i tried making it not an array & everything but this worked, so maybe i just did something wrong.
 				int rResult = WSAEnumNetworkEvents(ListenSocket, NewEvent[0], &NetworkEvents);
 				
 				if (rResult < 0) {
@@ -285,25 +284,39 @@ int main() {
 				continue;
 			} else {
 				if (fdarray.revents & POLLRDNORM) {
-					//clear the buffer
-					//memset(recvbuf, 0, sizeof(char)*SEND_SIZE);
-					recv(ClientSockets[f].sock, (char*)&recvMsg, recvbuflen, 0);
+					recv(ClientSockets[f].sock, (char*)&recvMsg, DEFAULT_BUFLEN, 0);
 					if (strstr(recvMsg.msgHead, "EXIT.") != 0) {
 						printf("Client #%d sent an exit call.\n", f);
-						//sendMessageToAll("EXIT.", "", "Server");
 						closesocket(ClientSockets[f].sock);
 						ClientSockets[f].isConnected = false;
-						char leftMsg[20];
-						snprintf(leftMsg, 20, "Client #%d left", f);
+						char leftMsg[50];
+						snprintf(leftMsg, 50, "%s left", ClientSockets[f].name);
 						sendMessageToAll("STATUS.", leftMsg, "Server");
+						strcpy(ClientSockets[f].name, "NOTSET");
 						sendUserList();
 						continue;
 					} else if (strstr(recvMsg.msgHead, "NAMEUPDATE.") != 0) {
+						char oldName[20];
+						strcpy(oldName, ClientSockets[f].name);
 						if (strcmp(recvMsg.msgBody, "NOTSET") == 0) {
-							char tmpName[20];
 							snprintf(ClientSockets[f].name, NAME_SIZE, "Client #%d", f);
+							puts("their name was notset");
 						} else {
 							strcpy(ClientSockets[f].name, recvMsg.msgBody);
+						}
+						
+						char nameUpdateMsg[60];
+						sprintf(nameUpdateMsg, "Client #%d", f);
+						puts(nameUpdateMsg);
+						if (strcmp(ClientSockets[f].name, nameUpdateMsg) != 0 && strcmp(oldName, "NOTSET") != 0 && strcmp(oldName, nameUpdateMsg) != 0) {
+							snprintf(nameUpdateMsg, 60, "Client #%d, AKA '%s' changed their name to '%s'", f, oldName, ClientSockets[f].name);
+							sendMessageToAll("STATUS.", nameUpdateMsg, "Server");
+						} else if (strcmp(nameUpdateMsg, oldName) != 0 && strcmp(ClientSockets[f].name, nameUpdateMsg) == 0 && strcmp(oldName, "NOTSET") != 0) {
+							snprintf(nameUpdateMsg, 60, "Client #%d, AKA '%s' reset their name.", f, oldName);
+							sendMessageToAll("STATUS.", nameUpdateMsg, "Server");
+						} else if (strcmp(nameUpdateMsg, ClientSockets[f].name) != 0) {
+							snprintf(nameUpdateMsg, 60, "Client #%d changed their name to '%s'", f, ClientSockets[f].name);
+							sendMessageToAll("STATUS.", nameUpdateMsg, "Server");
 						}
 					} else if (strstr(recvMsg.msgHead, "TEXT.") != 0) {
 						snprintf(bodyer, SEND_SIZE, "%s", recvMsg.msgBody);

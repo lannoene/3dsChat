@@ -66,7 +66,7 @@ void resetMsgVars(bool resetRecv, bool resetSend) {
 	}
 }
 
-void recvChat() {
+void recvChat(void) {
 	resetMsgVars(true, true);
 	int iResult = 0;
 	
@@ -162,7 +162,7 @@ void sendMsgSocket(struct jsonParse *config) {
 	}
 }
 
-int initSocket() {
+int initSocket(void) {
 	// allocate buffer for SOC service
 	SOC_buffer = (u32*)memalign(SOC_ALIGN, SOC_BUFFERSIZE);
 
@@ -317,11 +317,11 @@ void sendStatusMsg(char* messageTmp, ...) {
 }
 
 
-void exitSocket() {
+void exitSocket(void) {
 	close(sock);
 }
 
-void offsetAllItemsDownByOne() {
+void offsetAllItemsDownByOne(void) {
 	for (int i = 0; i < MAX_LOG - 1; i++) {
 		strcpy(logMsgs[i].msgHead, logMsgs[i + 1].msgHead);
 		strcpy(logMsgs[i].msgBody, logMsgs[i + 1].msgBody);
@@ -335,14 +335,14 @@ void recvUserList() {
 	snprintf(userListNum, 50, "Users connected: %ld", connectedUserCount);
 }
 
-void displayUserList() {
+void displayUserList(void) {
 	/*for (int i = 0; i < connectedUserCount; i++) {
 		
 	}*/
 	text(userListNum, 0, 15, 0.5f, ALIGN_LEFT);
 }
 
-void resetChatConsole() {
+void resetChatConsole(void) {
 	recvdMsgs = 0;
 }
 
